@@ -1,3 +1,4 @@
+earentpBaielielieldthttoarcifiro
 
 package com.meghmala.cosmetics
 
@@ -15,6 +16,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 data class Product(
+    val id: Long,
     val name: String,
     val code: String,
     val buy: Double,
@@ -23,35 +25,23 @@ data class Product(
 )
 
 class MainActivity : ComponentActivity() {
-
-    private val products = mutableStateListOf<Product>()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val prefs = getSharedPreferences("shop_data", MODE_PRIVATE)
+        val prefs = getSharedPreferences("meghmala_data", MODE_PRIVATE)
+        val products = mutableStateListOf<Product>()
+        var totalSales by mutableDoubleStateOf(
+            prefs.getFloat("sales", 0f).toDouble()
+        )
+        var totalProfit by mutableDoubleStateOf(
+            prefs.getFloat("profit", 0f).toDouble()
+        )
 
-        fun loadProducts() {
-            products.clear()
-            val array = JSONArray(prefs.getString("products", "[]"))
-            for (i in 0 until array.length()) {
-                val item = array.getJSONObject(i)
-                products.add(
-                    Product(
-                        item.getString("name"),
-                        item.getString("code"),
-                        item.getDouble("buy"),
-                        item.getDouble("sell"),
-                        item.getInt("stock")
-                    )
-                )
-            }
-        }
-
-        fun saveProducts() {
+        fun save() {
             val array = JSONArray()
             products.forEach {
                 array.put(JSONObject().apply {
+                    put("id", it.id)
                     put("name", it.name)
                     put("code", it.code)
                     put("buy", it.buy)
@@ -59,10 +49,27 @@ class MainActivity : ComponentActivity() {
                     put("stock", it.stock)
                 })
             }
-            prefs.edit().putString("products", array.toString()).apply()
+            prefs.edit()
+                .putString("products", array.toString())
+                .putFloat("sales", totalSales.toFloat())
+                .putFloat("profit", totalProfit.toFloat())
+                .apply()
         }
 
-        loadProducts()
+        val saved = JSONArray(prefs.getString("products", "[]"))
+        for (i in 0 until saved.length()) {
+            val p = saved.getJSONObject(i)
+            products.add(
+                Product(
+                    p.getLong("id"),
+                    p.getString("name"),
+                    p.getString("code"),
+                    p.getDouble("buy"),
+                    p.getDouble("sell"),
+                    p.getInt("stock")
+                )
+            )
+        }
 
         setContent {
             var name by remember { mutableStateOf("") }
@@ -76,50 +83,44 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Scaffold(
                     topBar = {
-                        TopAppBar(
-                            title = { Text("মেঘমালা কসমেটিকস") }
-                        )
+                        TopAppBar(title = { Text("মেঘমালা কসমেটিকস") })
                     }
                 ) { padding ->
                     Column(
-                        modifier = Modifier
+                        Modifier
                             .padding(padding)
-                            .padding(16.dp)
+                            .padding(12.dp)
                             .fillMaxSize()
                     ) {
-                        Text("পণ্য যোগ করুন", style = MaterialTheme.typography.titleLarge)
+                        Text("মোট বিক্রি: ৳${"%.2f".format(totalSales)}")
+                        Text("মোট লাভ: ৳${"%.2f".format(totalProfit)}")
+
+                        HorizontalDivider()
+
+                        Text("নতুন পণ্য", style = MaterialTheme.typography.titleLarge)
 
                         OutlinedTextField(
-                            value = name,
-                            onValueChange = { name = it },
+                            name, { name = it },
                             label = { Text("পণ্যের নাম") },
                             modifier = Modifier.fillMaxWidth()
                         )
-
                         OutlinedTextField(
-                            value = code,
-                            onValueChange = { code = it },
-                            label = { Text("বারকোড বা পণ্য কোড") },
+                            code, { code = it },
+                            label = { Text("পণ্য কোড / বারকোড") },
                             modifier = Modifier.fillMaxWidth()
                         )
-
                         OutlinedTextField(
-                            value = buy,
-                            onValueChange = { buy = it },
+                            buy, { buy = it },
                             label = { Text("ক্রয়মূল্য") },
                             modifier = Modifier.fillMaxWidth()
                         )
-
                         OutlinedTextField(
-                            value = sell,
-                            onValueChange = { sell = it },
+                            sell, { sell = it },
                             label = { Text("বিক্রয়মূল্য") },
                             modifier = Modifier.fillMaxWidth()
                         )
-
                         OutlinedTextField(
-                            value = stock,
-                            onValueChange = { stock = it },
+                            stock, { stock = it },
                             label = { Text("স্টকের পরিমাণ") },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -133,17 +134,21 @@ class MainActivity : ComponentActivity() {
                                 if (name.isBlank() || b == null || s == null ||
                                     q == null || b < 0 || s < 0 || q < 0
                                 ) {
-                                    message = "সব তথ্য সঠিকভাবে পূরণ করো"
-                                } else if (products.any {
-                                        it.code == code.trim() && code.isNotBlank()
-                                    }
+                                    message = "সঠিক তথ্য দাও"
+                                } else if (code.isNotBlank() &&
+                                    products.any { it.code == code.trim() }
                                 ) {
-                                    message = "এই পণ্য কোড আগে থেকেই আছে"
+                                    message = "এই কোড আগে থেকেই আছে"
                                 } else {
                                     products.add(
-                                        Product(name.trim(), code.trim(), b, s, q)
+                                        Product(
+                                            System.currentTimeMillis(),
+                                            name.trim(),
+                                            code.trim(),
+                                            b, s, q
+                                        )
                                     )
-                                    saveProducts()
+                                    save()
                                     name = ""
                                     code = ""
                                     buy = ""
@@ -157,42 +162,75 @@ class MainActivity : ComponentActivity() {
                             Text("পণ্য সংরক্ষণ")
                         }
 
-                        if (message.isNotBlank()) {
-                            Text(message)
-                        }
+                        Text(message)
 
-                        Spacer(Modifier.height(12.dp))
+                        HorizontalDivider()
 
-                        Text("পণ্যের তালিকা", style = MaterialTheme.typography.titleLarge)
+                        Text("পণ্য খুঁজুন", style = MaterialTheme.typography.titleLarge)
 
                         OutlinedTextField(
-                            value = search,
-                            onValueChange = { search = it },
-                            label = { Text("নামের প্রথম অক্ষর বা কোড দিয়ে খুঁজুন") },
+                            search, { search = it },
+                            label = { Text("নামের প্রথম অক্ষর বা কোড") },
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        val filtered = products.filter {
-                            it.name.contains(search, ignoreCase = true) ||
-                                it.code.contains(search, ignoreCase = true)
-                        }
-
-                        Text("মোট পণ্য: ${products.size}")
-
                         LazyColumn {
-                            items(filtered) { product ->
+                            items(products.filter {
+                                it.name.contains(search, true) ||
+                                    it.code.contains(search, true)
+                            }) { product ->
+                                var quantity by remember(product.id) {
+                                    mutableStateOf("1")
+                                }
+
                                 Card(
-                                    modifier = Modifier
+                                    Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 5.dp)
                                 ) {
-                                    Column(Modifier.padding(12.dp)) {
-                                        Text(product.name, style = MaterialTheme.typography.titleMedium)
+                                    Column(Modifier.padding(10.dp)) {
+                                        Text(
+                                            product.name,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
                                         Text("কোড: ${product.code}")
-                                        Text("ক্রয়মূল্য: ৳${product.buy}")
                                         Text("বিক্রয়মূল্য: ৳${product.sell}")
-                                        Text("স্টক: ${product.stock}")
-                                        Text("সম্ভাব্য লাভ/পিস: ৳${product.sell - product.buy}")
+                                        Text("বর্তমান স্টক: ${product.stock}")
+
+                                        OutlinedTextField(
+                                            quantity,
+                                            { quantity = it },
+                                            label = { Text("বিক্রির পরিমাণ") }
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                val q = quantity.toIntOrNull()
+                                                if (q == null || q <= 0) {
+                                                    message = "সঠিক পরিমাণ দাও"
+                                                } else if (q > product.stock) {
+                                                    message = "পর্যাপ্ত স্টক নেই"
+                                                } else {
+                                                    val index = products.indexOfFirst {
+                                                        it.id == product.id
+                                                    }
+                                                    if (index >= 0) {
+                                                        val updated = product.copy(
+                                                            stock = product.stock - q
+                                                        )
+                                                        products[index] = updated
+                                                        totalSales += product.sell * q
+                                                        totalProfit +=
+                                                            (product.sell - product.buy) * q
+                                                        save()
+                                                        message = "বিক্রি সফল হয়েছে"
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text("বিক্রি করুন")
+                                        }
                                     }
                                 }
                             }
